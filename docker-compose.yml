@@ -1,0 +1,101 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: cloudspecter-backend
+    command: ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+    environment:
+      APP_PORT: "5000"
+      FETCH_TIMEOUT_SECONDS: "5"
+    ports:
+      - "5000:5000"
+    depends_on:
+      - imds
+      - localstack
+    networks:
+      - cloudspecter-net
+
+  scanner:
+    build:
+      context: ./scanner
+    container_name: cloudspecter-scanner
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+      - imds
+      - localstack
+    networks:
+      - cloudspecter-net
+
+  imds:
+    build:
+      context: ./backend
+    container_name: cloudspecter-imds
+    command: ["gunicorn", "-w", "2", "-b", "0.0.0.0:1338", "imds_emulator:app"]
+    environment:
+      IMDS_PORT: "1338"
+      IMDS_REQUIRE_TOKEN: "false"
+    ports:
+      - "1338:1338"
+    networks:
+      - cloudspecter-net
+
+  localstack:
+    image: localstack/localstack:3.5
+    container_name: cloudspecter-localstack
+    environment:
+      SERVICES: "s3,iam,secretsmanager,dynamodb"
+      DEFAULT_REGION: "us-east-1"
+      DEBUG: "1"
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/localstack/init:/etc/localstack/init/ready.d
+    networks:
+      - cloudspecter-net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: cloudspecter-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - backend
+      - imds
+    networks:
+      - cloudspecter-net
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: cloudspecter-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - cloudspecter-net
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  cloudspecter-net:
+    external: true
+    name: cloudspecter-net

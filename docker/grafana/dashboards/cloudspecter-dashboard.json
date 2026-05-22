@@ -1,0 +1,50 @@
+{
+  "uid": "cloudspecter-overview",
+  "title": "CloudSpecter Overview",
+  "tags": ["cloudspecter", "lab"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Backend Fetch Requests",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(cloudspecter_fetch_requests_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "IMDS Requests",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (endpoint, result) (rate(cloudspecter_imds_requests_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "IMDSv2 Tokens Issued",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 6},
+      "targets": [
+        {
+          "expr": "cloudspecter_imds_tokens_issued_total",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

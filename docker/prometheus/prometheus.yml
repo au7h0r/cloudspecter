@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: cloudspecter-backend
+    static_configs:
+      - targets: ["backend:5000"]
+
+  - job_name: cloudspecter-imds
+    static_configs:
+      - targets: ["imds:1338"]
