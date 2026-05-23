@@ -10,26 +10,34 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "Backend Fetch Requests",
+      "title": "Live Attacks",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "sum by (result) (rate(cloudspecter_fetch_requests_total[5m]))",
+          "expr": "sum(rate(cloudspecter_ssrf_attempts_total[5m]))",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(cloudspecter_metadata_access_total[5m]))",
+          "refId": "B"
         }
       ]
     },
     {
       "id": 2,
       "type": "timeseries",
-      "title": "IMDS Requests",
+      "title": "Credential Theft Attempts",
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "sum by (endpoint, result) (rate(cloudspecter_imds_requests_total[5m]))",
+          "expr": "sum(rate(cloudspecter_failed_token_requests_total[5m]))",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(cloudspecter_imds_requests_total{endpoint=\"credentials\"}[5m]))",
+          "refId": "B"
         }
       ]
     },
@@ -44,6 +52,21 @@
           "expr": "cloudspecter_imds_tokens_issued_total",
           "refId": "A"
         }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Cloud Misconfigurations",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 10},
+      "targets": [
+        {"expr": "cloudspecter_audit_public_s3_total", "refId": "A"},
+        {"expr": "cloudspecter_audit_imdsv1_total", "refId": "B"},
+        {"expr": "cloudspecter_audit_open_sg_total", "refId": "C"},
+        {"expr": "cloudspecter_audit_overprivileged_roles_total", "refId": "D"},
+        {"expr": "cloudspecter_audit_exposed_secrets_total", "refId": "E"},
+        {"expr": "cloudspecter_audit_unencrypted_volumes_total", "refId": "F"}
       ]
     }
   ]

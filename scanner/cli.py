@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from reporting.render import save_markdown, save_report
+from reporting.render import save_html, save_markdown, save_pdf, save_report
 from scanner.aws_auditor.engine import AwsAuditorEngine
 from scanner.metadata.assessment import MetadataAssessmentService
 
@@ -17,6 +17,8 @@ def _build_compare_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentP
     parser.add_argument("--output-dir", default="artifacts/reports")
     parser.add_argument("--json-output", default="cloudspecter-comparison.json")
     parser.add_argument("--markdown-output", default="cloudspecter-comparison.md")
+    parser.add_argument("--html-output", default="cloudspecter-comparison.html")
+    parser.add_argument("--pdf-output", default="cloudspecter-comparison.pdf")
     return parser
 
 
@@ -27,6 +29,8 @@ def _build_assess_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
     parser.add_argument("--output-dir", default="artifacts/reports")
     parser.add_argument("--json-output", default="cloudspecter-assessment.json")
     parser.add_argument("--markdown-output", default="cloudspecter-assessment.md")
+    parser.add_argument("--html-output", default="cloudspecter-assessment.html")
+    parser.add_argument("--pdf-output", default="cloudspecter-assessment.pdf")
     return parser
 
 
@@ -37,6 +41,8 @@ def _build_audit_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
     parser.add_argument("--output-dir", default="artifacts/reports")
     parser.add_argument("--json-output", default="cloudspecter-aws-audit.json")
     parser.add_argument("--markdown-output", default="cloudspecter-aws-audit.md")
+    parser.add_argument("--html-output", default="cloudspecter-aws-audit.html")
+    parser.add_argument("--pdf-output", default="cloudspecter-aws-audit.pdf")
     return parser
 
 
@@ -62,7 +68,9 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = Path(args.output_dir)
         json_path = save_report(report, output_dir / args.json_output)
         md_path = save_markdown(report, output_dir / args.markdown_output)
-        print(json.dumps({"json": str(json_path), "markdown": str(md_path)}, indent=2))
+        html_path = save_html(report, output_dir / args.html_output)
+        pdf_path = save_pdf(report, output_dir / args.pdf_output)
+        print(json.dumps({"json": str(json_path), "markdown": str(md_path), "html": str(html_path), "pdf": str(pdf_path)}, indent=2))
         return 0
 
     if command == "audit":
@@ -72,7 +80,9 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = Path(args.output_dir)
         json_path = save_report(report, output_dir / args.json_output)
         md_path = save_markdown(report, output_dir / args.markdown_output)
-        print(json.dumps({"json": str(json_path), "markdown": str(md_path)}, indent=2))
+        html_path = save_html(report, output_dir / args.html_output)
+        pdf_path = save_pdf(report, output_dir / args.pdf_output)
+        print(json.dumps({"json": str(json_path), "markdown": str(md_path), "html": str(html_path), "pdf": str(pdf_path)}, indent=2))
         return 0
 
     parser = _build_assess_parser(parser)
@@ -81,7 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     output_dir = Path(args.output_dir)
     json_path = save_report(report, output_dir / args.json_output)
     md_path = save_markdown(report, output_dir / args.markdown_output)
-    print(json.dumps({"json": str(json_path), "markdown": str(md_path)}, indent=2))
+    html_path = save_html(report, output_dir / args.html_output)
+    pdf_path = save_pdf(report, output_dir / args.pdf_output)
+    print(json.dumps({"json": str(json_path), "markdown": str(md_path), "html": str(html_path), "pdf": str(pdf_path)}, indent=2))
     return 0
 
 

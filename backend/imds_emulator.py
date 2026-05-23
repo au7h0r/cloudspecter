@@ -22,9 +22,18 @@ IMDS_REQUESTS = Counter(
     "Total requests handled by the IMDS emulator",
     ["endpoint", "result"],
 )
+METADATA_ACCESS = Counter(
+    "cloudspecter_metadata_access_total",
+    "Total metadata access attempts handled by the IMDS emulator",
+    ["endpoint", "result"],
+)
 IMDS_TOKENS_ISSUED = Counter(
     "cloudspecter_imds_tokens_issued_total",
     "Total IMDSv2 tokens issued",
+)
+FAILED_TOKEN_REQUESTS = Counter(
+    "cloudspecter_failed_token_requests_total",
+    "Total failed IMDSv2 token requests",
 )
 
 
@@ -133,12 +142,14 @@ def create_token():
     ttl_raw = request.headers.get(IMDS_TOKEN_TTL_HEADER)
     if ttl_raw is None:
         IMDS_REQUESTS.labels(endpoint="token", result="bad_request").inc()
+        FAILED_TOKEN_REQUESTS.inc()
         return _json_error(f"missing {IMDS_TOKEN_TTL_HEADER}", 400)
 
     try:
         ttl_seconds = int(ttl_raw)
     except ValueError:
         IMDS_REQUESTS.labels(endpoint="token", result="bad_request").inc()
+        FAILED_TOKEN_REQUESTS.inc()
         return _json_error("invalid ttl", 400)
 
     token = state.issue_token(ttl_seconds)
@@ -156,9 +167,11 @@ def meta_root():
     guard = _guard_metadata_request()
     if guard:
         IMDS_REQUESTS.labels(endpoint="meta_root", result="unauthorized").inc()
+        METADATA_ACCESS.labels(endpoint="meta_root", result="unauthorized").inc()
         return guard
 
     IMDS_REQUESTS.labels(endpoint="meta_root", result="success").inc()
+    METADATA_ACCESS.labels(endpoint="meta_root", result="success").inc()
     return Response("iam/\n", mimetype="text/plain")
 
 
@@ -168,9 +181,11 @@ def iam_root():
     guard = _guard_metadata_request()
     if guard:
         IMDS_REQUESTS.labels(endpoint="iam_root", result="unauthorized").inc()
+        METADATA_ACCESS.labels(endpoint="iam_root", result="unauthorized").inc()
         return guard
 
     IMDS_REQUESTS.labels(endpoint="iam_root", result="success").inc()
+    METADATA_ACCESS.labels(endpoint="iam_root", result="success").inc()
     return Response("security-credentials/\n", mimetype="text/plain")
 
 
@@ -180,9 +195,11 @@ def iam_role_list():
     guard = _guard_metadata_request()
     if guard:
         IMDS_REQUESTS.labels(endpoint="role_list", result="unauthorized").inc()
+        METADATA_ACCESS.labels(endpoint="role_list", result="unauthorized").inc()
         return guard
 
     IMDS_REQUESTS.labels(endpoint="role_list", result="success").inc()
+    METADATA_ACCESS.labels(endpoint="role_list", result="success").inc()
     return Response(f"{state.role_name}\n", mimetype="text/plain")
 
 
@@ -191,14 +208,17 @@ def iam_credentials(role_name: str):
     guard = _guard_metadata_request()
     if guard:
         IMDS_REQUESTS.labels(endpoint="credentials", result="unauthorized").inc()
+        METADATA_ACCESS.labels(endpoint="credentials", result="unauthorized").inc()
         return guard
 
     if role_name != state.role_name:
         IMDS_REQUESTS.labels(endpoint="credentials", result="not_found").inc()
+        METADATA_ACCESS.labels(endpoint="credentials", result="not_found").inc()
         return _json_error("unknown role", 404)
 
     creds = state.credentials
     IMDS_REQUESTS.labels(endpoint="credentials", result="success").inc()
+    METADATA_ACCESS.labels(endpoint="credentials", result="success").inc()
     payload = {
         "Code": "Success",
         "LastUpdated": creds.last_updated.isoformat().replace("+00:00", "Z"),

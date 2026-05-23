@@ -61,11 +61,14 @@ python -m scanner.cli audit --region us-east-1 --endpoint-url http://localhost:4
 Look for these categories first:
 
 - `IMDSv1 enabled` with severity `Critical`
+- `IMDSv2 enforced` with severity `Info`
 - `Public S3 bucket` with severity `Critical`
 - `Overprivileged IAM role` with severity `High`
 - `Open security group` with severity `High`
 - `Exposed secret` with severity `Critical`
 - `Unencrypted volume` with severity `Medium`
+
+For EC2 metadata checks, the auditor reads `MetadataOptions.HttpTokens` and `MetadataOptions.HttpEndpoint` from `ec2.describe_instances()`. If `HttpTokens` is `optional`, the instance is treated as IMDSv1 enabled. If `HttpTokens` is `required`, the instance is treated as IMDSv2 enforced.
 
 ## 6. Deliverables
 

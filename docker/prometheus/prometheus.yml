@@ -10,3 +10,7 @@ scrape_configs:
   - job_name: cloudspecter-imds
     static_configs:
       - targets: ["imds:1338"]
+
+  - job_name: cloudspecter-scanner
+    static_configs:
+      - targets: ["scanner:8080"]

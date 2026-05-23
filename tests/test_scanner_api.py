@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import unittest
 from unittest.mock import patch
+import unittest
 
 from scanner.api import app
 
@@ -49,10 +49,32 @@ class ScannerApiTests(unittest.TestCase):
 
     @patch("scanner.api.aws_auditor.audit")
     def test_aws_audit_endpoint_returns_json(self, mock_audit):
-        mock_audit.return_value = FakeReport({"risk_score": 91, "findings": [{"finding": {"finding": "Public S3 bucket"}}]})
+        mock_audit.return_value = FakeReport(
+            {
+                "scope": {"region": "us-east-1", "source": "authorized_aws"},
+                "counts": {
+                    "public_s3": 1,
+                    "imdsv1": 2,
+                    "open_security_group": 3,
+                    "overprivileged_iam_role": 4,
+                    "exposed_secret": 5,
+                    "unencrypted_volume": 6,
+                },
+                "risk_score": 91,
+                "findings": [{"finding": {"finding": "Public S3 bucket"}}],
+            }
+        )
         response = self.client.post("/api/v1/aws/audit", json={"region": "us-east-1"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["risk_score"], 91)
+
+        metrics_response = self.client.get("/metrics")
+        metrics_text = metrics_response.data.decode("utf-8")
+        self.assertIn("cloudspecter_audit_findings_total", metrics_text)
+        self.assertIn("cloudspecter_audit_public_s3_total", metrics_text)
+        self.assertIn("cloudspecter_audit_imdsv1_total", metrics_text)
+        self.assertIn("cloudspecter_audit_open_sg_total", metrics_text)
+
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import logging
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -73,52 +74,87 @@ class AwsAuditorEngine:
     def _client(self, service_name: str, region_name: str, endpoint_url: str | None):
         return self.session.client(service_name, region_name=region_name, endpoint_url=endpoint_url)
 
+    def _is_localstack_endpoint(self, endpoint_url: str | None) -> bool:
+        if not endpoint_url:
+            return False
+        host = urlparse(endpoint_url).hostname or ""
+        return host in {"localstack", "localhost", "127.0.0.1"}
+
     def _audit_imdsv1(self, region_name: str, endpoint_url: str | None) -> list[AwsAuditFinding]:
         findings: list[AwsAuditFinding] = []
         try:
             ec2 = self._client("ec2", region_name, endpoint_url)
-            paginator = ec2.get_paginator("describe_instances")
-            for page in paginator.paginate():
-                for reservation in page.get("Reservations", []):
+            next_token: str | None = None
+            while True:
+                describe_args: dict[str, Any] = {}
+                if next_token:
+                    describe_args["NextToken"] = next_token
+                response = ec2.describe_instances(**describe_args)
+                for reservation in response.get("Reservations", []):
                     for instance in reservation.get("Instances", []):
                         metadata_options = instance.get("MetadataOptions", {})
                         http_tokens = str(metadata_options.get("HttpTokens", "optional")).lower()
-                        if http_tokens != "required":
-                            finding = risk_engine.from_code(
-                                "imdsv1_enabled",
-                                {
-                                    "instance_id": instance.get("InstanceId"),
-                                    "http_tokens": http_tokens,
-                                    "http_endpoint": metadata_options.get("HttpEndpoint"),
-                                },
-                            )
+                        http_endpoint = str(metadata_options.get("HttpEndpoint", "enabled")).lower()
+                        resource_id = str(instance.get("InstanceId") or "unknown")
+                        evidence = {
+                            "instance_id": instance.get("InstanceId"),
+                            "http_tokens": http_tokens,
+                            "http_endpoint": http_endpoint,
+                            "metadata_options": metadata_options,
+                        }
+                        if http_endpoint != "enabled":
                             findings.append(
                                 AwsAuditFinding(
                                     category="imdsv1",
                                     resource_type="ec2_instance",
-                                    resource_id=str(instance.get("InstanceId") or "unknown"),
-                                    finding=finding,
-                                    evidence={"metadata_options": metadata_options},
+                                    resource_id=resource_id,
+                                    finding=risk_engine.from_code("imdsv1_enabled", evidence),
+                                    evidence=evidence,
                                 )
                             )
+                        elif http_tokens == "optional":
+                            findings.append(
+                                AwsAuditFinding(
+                                    category="imdsv1",
+                                    resource_type="ec2_instance",
+                                    resource_id=resource_id,
+                                    finding=risk_engine.from_code("imdsv1_enabled", evidence),
+                                    evidence=evidence,
+                                )
+                            )
+                        else:
+                            findings.append(
+                                AwsAuditFinding(
+                                    category="imdsv2_enforced",
+                                    resource_type="ec2_instance",
+                                    resource_id=resource_id,
+                                    finding=risk_engine.from_code("imdsv2_required", evidence),
+                                    evidence=evidence,
+                                )
+                            )
+                next_token = response.get("NextToken")
+                if not next_token:
+                    break
         except Exception as exc:
             self.logger.info("IMDS audit failed: %s", exc)
         return findings
 
     def _audit_public_s3(self, region_name: str, endpoint_url: str | None) -> list[AwsAuditFinding]:
         findings: list[AwsAuditFinding] = []
+        localstack_mode = self._is_localstack_endpoint(endpoint_url)
         try:
             s3 = self._client("s3", region_name, endpoint_url)
             for bucket in s3.list_buckets().get("Buckets", []):
                 bucket_name = bucket.get("Name")
                 public = False
                 evidence: dict[str, Any] = {"bucket": bucket_name}
-                try:
-                    status = s3.get_bucket_policy_status(Bucket=bucket_name)
-                    public = bool(status.get("PolicyStatus", {}).get("IsPublic"))
-                    evidence["policy_status"] = status
-                except Exception:
-                    public = False
+                if not localstack_mode:
+                    try:
+                        status = s3.get_bucket_policy_status(Bucket=bucket_name)
+                        public = bool(status.get("PolicyStatus", {}).get("IsPublic"))
+                        evidence["policy_status"] = status
+                    except Exception:
+                        public = False
                 try:
                     acl = s3.get_bucket_acl(Bucket=bucket_name)
                     evidence["acl_grants"] = acl.get("Grants", [])
@@ -301,6 +337,8 @@ class AwsAuditorEngine:
             remediation.append("Replace broad IAM permissions with service-scoped permissions.")
         if "imdsv1" in categories:
             remediation.append("Set EC2 metadata options to HttpTokens=required.")
+        if "imdsv2_enforced" in categories:
+            remediation.append("Keep EC2 metadata options set to HttpTokens=required and monitor for drift.")
         return remediation
 
     def _grafana_payload(self, scope: AwsAuditScope, findings: list[AwsAuditFinding], risk_score: int) -> dict[str, Any]:
@@ -310,6 +348,7 @@ class AwsAuditorEngine:
                 {"name": "cloudspecter_audit_findings_total", "value": len(findings), "labels": {"region": scope.region, "source": scope.source}},
                 {"name": "cloudspecter_audit_public_s3_total", "value": counts.get("public_s3", 0), "labels": {"region": scope.region, "source": scope.source}},
                 {"name": "cloudspecter_audit_imdsv1_total", "value": counts.get("imdsv1", 0), "labels": {"region": scope.region, "source": scope.source}},
+                {"name": "cloudspecter_audit_imdsv2_enforced_total", "value": counts.get("imdsv2_enforced", 0), "labels": {"region": scope.region, "source": scope.source}},
                 {"name": "cloudspecter_audit_open_sg_total", "value": counts.get("open_security_group", 0), "labels": {"region": scope.region, "source": scope.source}},
                 {"name": "cloudspecter_audit_overprivileged_roles_total", "value": counts.get("overprivileged_iam_role", 0), "labels": {"region": scope.region, "source": scope.source}},
                 {"name": "cloudspecter_audit_exposed_secrets_total", "value": counts.get("exposed_secret", 0), "labels": {"region": scope.region, "source": scope.source}},

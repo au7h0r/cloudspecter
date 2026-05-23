@@ -18,6 +18,12 @@ FETCH_REQUESTS = Counter(
     ["result"],
 )
 
+SSRF_ATTEMPTS = Counter(
+    "cloudspecter_ssrf_attempts_total",
+    "Total SSRF-style fetch attempts handled by the vulnerable image fetch API",
+    ["result"],
+)
+
 FETCH_LATENCY = Histogram(
     "cloudspecter_fetch_request_duration_seconds",
     "Time spent handling fetch requests",
@@ -48,6 +54,7 @@ def fetch_url():
     target_url = request.args.get("url", "").strip()
     if not target_url:
         FETCH_REQUESTS.labels(result="bad_request").inc()
+        SSRF_ATTEMPTS.labels(result="bad_request").inc()
         return jsonify({"error": "missing url"}), 400
 
     logging.info("Fetching URL: %s", target_url)
@@ -56,12 +63,14 @@ def fetch_url():
         with FETCH_LATENCY.time():
             response = requests.get(target_url, timeout=DEFAULT_TIMEOUT)
         FETCH_REQUESTS.labels(result="success").inc()
+        SSRF_ATTEMPTS.labels(result="success").inc()
         return jsonify({
             "status": response.status_code,
             "content": response.text[:500],
         })
     except requests.RequestException as exc:
         FETCH_REQUESTS.labels(result="error").inc()
+        SSRF_ATTEMPTS.labels(result="error").inc()
         return jsonify({"error": str(exc)}), 500
 
 
